@@ -13,11 +13,31 @@
                          (alias . process-aliases)
                          (func . process-functions)))
 
+(defvar local-env-shell-pid nil
+  "Set this variable when the buffer process PID is not the shell PID.")
+(make-variable-buffer-local 'local-env-shell-pid)
+
 (defvar process-aliases nil)
 (defvar process-functions nil)
 
+(defun local-env-get-shell-pid ()
+  (or local-env-shell-pid
+      ;; we can only use the buffer process PID
+      ;; with local shells
+      (unless (file-remote-p default-directory)
+	(-some->> (current-buffer)
+		  get-buffer-process
+		  process-id))))
+
+(defun shx-cmd-set-pid (pid)
+  "(SAFE) sets env local shell PID.
+  Add the following lines to (or equvilent) to your shell starup file
+
+  echo \"<set-pid $$>\""
+  (setq local-env-shell-pid pid))
+
 (defun local-env-get-file (type)
-  (-some->> ($get-local-pid)
+  (-some->> (local-env-get-shell-pid)
             (format (concat "%s." (symbol-name type)))
             (f-join env-dump-dir)
             (concat (file-remote-p default-directory))))
@@ -41,7 +61,7 @@
       (local-env-update type)
       (setf (alist-get type local-env-timestamps) time-stamp))))
 
-(defun local-env-sync-env ()
+(defun local-env-sync-env (&rest _)
   "sync the enviroment variables"
   (local-env-sync 'env))
 
