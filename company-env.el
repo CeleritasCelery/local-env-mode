@@ -57,13 +57,13 @@
                 ;; to ensure we are not using this backend when
                 ;; `company-command' would be better
                 ((and (equal cmd prefix) ;; used in assignment
-		      (progn (shell-env-sync 'env)
+		      (progn (local-env-sync 'env)
 			     (--any? (string-prefix-p prefix it)
                                      process-environment)))
                  prefix)))))))
 
 (defun company-env--candidates (prefix)
-  (shell-env-sync 'env)
+  (local-env-sync 'env)
   (--map  (-let [(cand annot) (split-string it "=" 'omit-nulls)]
             (when annot
               (put-text-property 0 1 'annotation annot cand))

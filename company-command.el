@@ -4,6 +4,8 @@
 
 ;; Author: Troy Hinckley <t.macman@gmail.com>
 ;; Keywords: lisp
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "25.1") (dash "2.0.0") (dash-functional "2.11.0"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -44,10 +46,10 @@
     (when-let (prefix (company-grab-symbol))
       (when (and (not (string-match-p "/" prefix))
                  (not (string-prefix-p "$" prefix))
-                 (equals prefix
-			 (buffer-substring
-			  (line-beginning-position)
-			  (point))))
+                 (equal prefix
+                        (buffer-substring
+                         (line-beginning-position)
+                         (point))))
         prefix))))
 
 (defun company-command--get-type (type)
@@ -79,8 +81,8 @@
         output))))
 
 (defun company-command--candidates (prefix)
-  (shell-env-sync 'func)
-  (when (shell-env-sync 'alias)
+  (local-env-sync 'func)
+  (when (local-env-sync 'alias)
     (setq process-aliases (--map (->> it
                                       (string-remove-prefix "alias ")
                                       (string-remove-suffix "'")
@@ -109,10 +111,11 @@
          (-distinct)))) ;; remove duplicates
 
 (defun company-command--meta (cand)
-  (if (equals "executable" (get-text-property 0 'annotation cand))
+  (if (equal "executable" (get-text-property 0 'annotation cand))
       ($proc-to-string "which" cand)
     (get-text-property 0 'meta cand)))
 
+;;;###autoload
 (defun company-command (command &optional arg &rest ignored)
   "Complete shell commands in shell mode. See `company's COMMAND
 ARG and IGNORED for details."
