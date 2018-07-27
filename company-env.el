@@ -18,6 +18,7 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+;; Package-Requires: ((dash "2.12.1") (s "1.10.0") (emacs "25.1"))
 ;;; Commentary:
 
 ;; 
@@ -25,6 +26,7 @@
 ;;; Code:
 
 (require 'dash)
+(require 's)
 
 (defvar company-env-commands '("unset" "unsetenv" "munge"))
 (defvar company-env-enabled-modes '(shell-mode) "enabled modes.")
@@ -37,43 +39,42 @@
 (defun company-env--prefix ()
   (when (member major-mode company-env-enabled-modes)
     (when-let (prefix (with-syntax-table (make-syntax-table (syntax-table))
-			(modify-syntax-entry ?{ "_")
-			(company-grab-symbol)))
-      (unless (string-match-p "/" prefix)
+                        (modify-syntax-entry ?{ "_")
+                        (company-grab-symbol)))
+      (unless (s-contains? "/" prefix)
         (-let [(cmd arg)
-               (split-string (buffer-substring (line-beginning-position)
-					       (point))
-			     (rx (+ space))
-			     'omit-nulls)]
-	  (cond ((string-prefix-p "$" prefix)
-		 (let ((var (string-remove-prefix "{" (string-remove-prefix "$" prefix))))
-		   (cons var (1+ (length var))))) ;; expansion
+               (s-split (rx (+ space))
+                        (buffer-substring (line-beginning-position)
+                                          (point))
+                        t)]
+          (cond ((s-prefix? "$" prefix) (let ((var (s-chop-prefixes '("$" "{") prefix)))
+                                          (cons var (1+ (length var))))) ;; expansion
                 ;; When using unset export etc the variable name does not have a
                 ;; `$' so we need to make sure to watch for this senario
-		((and (equal arg prefix)
+                ((and (s-equals? arg prefix)
                       (-contains? company-env-commands cmd))
                  prefix)
                 ;; used in asigment (i.e. FOO=bar). Force update the environment
                 ;; to ensure we are not using this backend when
                 ;; `company-command' would be better
-                ((and (equal cmd prefix) ;; used in assignment
-		      (progn (local-env-sync 'env)
-			     (--any? (string-prefix-p prefix it)
+                ((and (s-equals? cmd prefix) ;; used in assignment
+                      (progn (local-env-sync 'env)
+                             (--any? (s-prefix? prefix it)
                                      process-environment)))
                  prefix)))))))
 
 (defun company-env--candidates (prefix)
   (local-env-sync 'env)
-  (--map  (-let [(cand annot) (split-string it "=" 'omit-nulls)]
+  (--map  (-let [(cand annot) (s-split-up-to "=" it 1 t)]
             (when annot
               (put-text-property 0 1 'annotation annot cand))
             cand)
-          (--filter (string-prefix-p prefix it)
+          (--filter (s-prefix? prefix it)
                     process-environment)))
 
 ;;;###autoload
 (defun company-env (command &optional arg &rest ignored)
-  "Complete eviroment variables based on local enviroment. See
+  "Complete shell environment variables based on local env. See
 `company's COMMAND ARG and IGNORED for details."
   (interactive (list 'interactive))
   (cl-case command

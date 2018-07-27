@@ -5,7 +5,7 @@
 ;; Author: Troy Hinckley <t.macman@gmail.com>
 ;; Keywords: lisp
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "25.1") (dash "2.0.0") (dash-functional "2.11.0"))
+;; Package-Requires: ((emacs "25.1") (s "1.10.0") (dash "2.0.0") (dash-functional "2.11.0"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@
 (require 'dash)
 (require 'dash-functional)
 (require 'local-env)
-(require 'subr-x)
+(require 's)
 
 (defvar company-command-enabled-modes '(shell-mode)
   "modes for which company commands is enabled")
@@ -44,12 +44,12 @@
 (defun company-command--prefix ()
   (when (member major-mode company-command-enabled-modes)
     (when-let (prefix (company-grab-symbol))
-      (when (and (not (string-match-p "/" prefix))
-                 (not (string-prefix-p "$" prefix))
-                 (equal prefix
-                        (buffer-substring
-                         (line-beginning-position)
-                         (point))))
+      (when (and (not (s-contains? "/" prefix))
+                 (not (s-prefix? "$" prefix))
+                 (s-equals? prefix
+                            (buffer-substring
+                             (line-beginning-position)
+                             (point))))
         prefix))))
 
 (defun company-command--get-type (type)
@@ -61,33 +61,30 @@
 (defun company-command--fetch (type &optional prefix)
   (let ((flag (alist-get type company-command--types))
         (buffer (generate-new-buffer "command-types")))
-    (call-process company-command-shell-type
-		  nil buffer nil "-c" (format "compgen %s %s" flag prefix))
-    (let ((candidates (string-trim (with-current-buffer buffer
-				     (buffer-string)))))
+    (call-process company-command-shell-type nil buffer nil "-c" (s-join " " (list "compgen" flag prefix)))
+    (let ((candidates (s-trim (with-current-buffer buffer
+                                (buffer-string)))))
       (kill-buffer buffer)
-      (when (and candidates
-		 (not (equal "" candidates)))
-        (split-string candidates "\n")))))
+      (when (s-present? candidates)
+        (s-lines candidates)))))
 
 (defun $proc-to-string (proc &rest args)
   (let ((buffer (generate-new-buffer "proc")))
-    (apply #'call-process proc (null 'in-file) buffer (null 'display) args)
-    (let ((output (string-trim (with-current-buffer buffer
-				 (buffer-string)))))
+    (apply #'call-process proc (null :in-file) buffer (null :display) args)
+    (let ((output (s-trim (with-current-buffer buffer
+                            (buffer-string)))))
       (kill-buffer buffer)
-      (when (and output
-		 (not (equal "" output)))
+      (when (s-present? output)
         output))))
 
 (defun company-command--candidates (prefix)
   (local-env-sync 'func)
   (when (local-env-sync 'alias)
     (setq process-aliases (--map (->> it
-                                      (string-remove-prefix "alias ")
-                                      (string-remove-suffix "'")
-                                      (replace-regexp-in-string "='" "=")
-                                      (replace-regexp-in-string "'\\''" "'"))
+                                      (s-chop-prefix "alias ")
+                                      (s-chop-suffix "'")
+                                      (s-replace "='" "=")
+                                      (s-replace "'\\''" "'"))
                                  process-aliases)))
 
   (cl-flet ((annotate (annot list)
@@ -97,11 +94,11 @@
                process-functions
                (company-command--get-type 'builtin)
                (company-command--get-type 'keyword)) ;; all the competion sources
-         (--map (--filter (string-prefix-p prefix it) it)) ;; filter by those matching the prefix
+         (--map (--filter (s-prefix? prefix it) it)) ;; filter by those matching the prefix
          (funcall (-flip #'-snoc) ;; add the command compeletion (already filtered)
                   (company-command--fetch 'command prefix))
          (-zip-with #'annotate '("alias" "function" "built-in" "keyword" "executable")) ;; add annotation
-         (--map-first t (--map (-let [(cand meta) (split-string "=" it 'omit-nulls)]
+         (--map-first t (--map (-let [(cand meta) (s-split-up-to "=" it 1 t)]
                                  (when meta
                                    (put-text-property 0 1 'meta meta cand))
                                  cand)
@@ -111,14 +108,14 @@
          (-distinct)))) ;; remove duplicates
 
 (defun company-command--meta (cand)
-  (if (equal "executable" (get-text-property 0 'annotation cand))
+  (if (s-equals? "executable" (get-text-property 0 'annotation cand))
       ($proc-to-string "which" cand)
     (get-text-property 0 'meta cand)))
 
 ;;;###autoload
 (defun company-command (command &optional arg &rest ignored)
-  "Complete shell commands in shell mode. See `company's COMMAND
-ARG and IGNORED for details."
+  "Complete shell commands based on local env. See `company's
+COMMAND ARG and IGNORED for details."
   (interactive (list 'interactive))
   (cl-case command
     (interactive (company-begin-backend 'company-command))

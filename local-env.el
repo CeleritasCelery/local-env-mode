@@ -1,6 +1,6 @@
 ;;; config for `local enviroment' -*- lexical-binding: t -*-
 
-;; Package-Requires: ((dash "2.12.1") (f "0.18.2") (emacs "25.1"))
+;; Package-Requires: ((dash "2.12.1") (f "0.18.2")  (emacs "25.1"))
 
 (require 'dash)
 (require 'f)
@@ -58,8 +58,7 @@
               (set var))))
 
 (defun local-env-sync (type)
-  (when-let ((valid local-env-mode)
-             (src-file (local-env-get-file type))
+  (when-let ((src-file (local-env-get-file type))
 	     (time-stamp (->> src-file
 			      (file-attributes)
 			      (nth 5))))
