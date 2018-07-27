@@ -1,5 +1,6 @@
 ;;; config for `local enviroment' -*- lexical-binding: t -*-
 
+;; Package-Requires: ((dash "2.12.1") (f "0.18.2") (emacs "25.1"))
 
 (require 'dash)
 (require 'f)
@@ -12,6 +13,10 @@
 (defvar local-env-vars '((env . process-environment)
                          (alias . process-aliases)
                          (func . process-functions)))
+
+(defvar local-env-capture-variables nil
+  "list of environment variables that will be added to the global
+  enviroment with `local-env-capture'")
 
 (defvar local-env-shell-pid nil
   "Set this variable when the buffer process PID is not the shell PID.")
@@ -53,7 +58,8 @@
               (set var))))
 
 (defun local-env-sync (type)
-  (when-let ((src-file (local-env-get-file type))
+  (when-let ((valid local-env-mode)
+             (src-file (local-env-get-file type))
 	     (time-stamp (->> src-file
 			      (file-attributes)
 			      (nth 5))))
@@ -65,6 +71,29 @@
   "sync the enviroment variables"
   (local-env-sync 'env))
 
-(advice-add 'getenv :before #'local-env-sync-env)
+;;;###autoload
+(defun local-env-capture ()
+  "Load the local enviroment out of the buffer and into Emacs"
+  (interactive)
+  (cl-loop for env in local-env-shell-pid
+           do (let ((val (getenv env)))
+                ;; leave the current buffer scope to write the global
+                ;; environment values
+                (with-temp-buffer
+                  (setenv env val)))))
+
+;;;###autoload
+(define-minor-mode local-env-mode
+  "Toggle Local env mode.
+have a seperate environment from
+`process-environment' for the local buffer. This environment can
+be synced to a remote process that is properly configured"
+  :init-value nil
+  :lighter " env"
+  
+  (if local-env-mode
+      (advice-add 'getenv :before #'local-env-sync-env)
+    (advice-remove 'getenv 'local-env-sync-env)
+    (kill-local-variable 'process-environment)))
 
 (provide 'local-env)
